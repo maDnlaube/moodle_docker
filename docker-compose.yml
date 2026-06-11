@@ -1,0 +1,152 @@
+# Moodle 4.5 LTS docker-compose stack.
+#
+# Services:
+#   db      MariaDB 11.4 LTS                              (persistent: db_data)
+#   moodle  Apache + mod_php + Moodle source baked in     (persistent: moodledata)
+#   cron    Moodle's required background task runner      (same image as moodle)
+#   caddy   reverse proxy with automatic HTTPS            (persistent: caddy_data, caddy_config)
+#
+# Configuration: all site-specific values come from .env (see .env.example).
+# You should never need to edit this file for a standard deployment.
+#
+# Bring up:
+#   cp .env.example .env && nano .env
+#   docker compose up -d --build
+
+# Shared environment for the moodle and cron services. Values come from .env;
+# `${VAR:?message}` makes docker compose stop with that message if VAR is
+# missing, so a half-filled .env fails loudly instead of misbehaving quietly.
+x-moodle-env: &moodle-env
+  MOODLE_DB_HOST: db
+  MOODLE_DB_PORT: 3306
+  MOODLE_DB_NAME: ${DB_NAME:-moodle}
+  MOODLE_DB_USER: ${DB_USER:-moodle}
+  MOODLE_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env (copy .env.example to .env first)}
+  MOODLE_DB_PREFIX: ${DB_PREFIX:-mdl_}
+  MOODLE_WWWROOT: https://${MOODLE_DOMAIN:?Set MOODLE_DOMAIN in .env (use "localhost" to test on your own computer)}
+  MOODLE_SITE_FULLNAME: ${MOODLE_SITE_FULLNAME:-My Moodle Site}
+  MOODLE_SITE_SHORTNAME: ${MOODLE_SITE_SHORTNAME:-Moodle}
+  MOODLE_ADMIN_USER: ${MOODLE_ADMIN_USER:-admin}
+  MOODLE_ADMIN_PASSWORD: ${MOODLE_ADMIN_PASSWORD:?Set MOODLE_ADMIN_PASSWORD in .env}
+  MOODLE_ADMIN_EMAIL: ${MOODLE_ADMIN_EMAIL:?Set MOODLE_ADMIN_EMAIL in .env}
+  MOODLE_NOREPLY: ${MOODLE_NOREPLY:-}
+  MOODLE_SMTP_HOSTS: ${MOODLE_SMTP_HOSTS:-}
+  MOODLE_SMTP_USER: ${MOODLE_SMTP_USER:-}
+  MOODLE_SMTP_PASSWORD: ${MOODLE_SMTP_PASSWORD:-}
+  MOODLE_SMTP_SECURE: ${MOODLE_SMTP_SECURE:-}
+  MOODLE_SMTP_AUTH: ${MOODLE_SMTP_AUTH:-LOGIN}
+  MOODLE_SMTP_MAXBULK: ${MOODLE_SMTP_MAXBULK:-1}
+  TZ: ${MOODLE_TIMEZONE:-UTC}
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-moodle}
+      MARIADB_USER: ${DB_USER:-moodle}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      MARIADB_AUTO_UPGRADE: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --innodb-file-per-table=1
+      - --skip-character-set-client-handshake
+      - --max-allowed-packet=64M
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  moodle:
+    build:
+      context: .
+      target: moodle
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        MOODLE_BRANCH: ${MOODLE_BRANCH:-405}
+        MOODLE_TARBALL: ${MOODLE_TARBALL:-moodle-latest-405.tgz}
+    image: moodle-stack:${IMAGE_TAG:-4.5}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *moodle-env
+    volumes:
+      - moodledata:/var/www/moodledata
+    networks:
+      - internal
+    healthcheck:
+      # 3xx counts as healthy (Moodle redirects plain-HTTP probes to wwwroot).
+      # start_period is generous because the first run installs the database.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/login/index.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+
+  # Moodle requires its cron task runner every minute (sends mail, processes
+  # forum digests, cleans sessions, runs scheduled tasks). This reuses the
+  # moodle image and simply loops the official CLI cron script.
+  cron:
+    image: moodle-stack:${IMAGE_TAG:-4.5}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      moodle:
+        condition: service_started
+    user: www-data
+    entrypoint: []
+    command:
+      - bash
+      - -c
+      - |
+        sleep 90
+        while true; do
+          php /var/www/html/admin/cli/cron.php > /dev/null || true
+          sleep 60
+        done
+    environment: *moodle-env
+    volumes:
+      - moodledata:/var/www/moodledata
+    networks:
+      - internal
+
+  caddy:
+    build:
+      context: .
+      target: proxy
+    image: moodle-stack-caddy:${IMAGE_TAG:-4.5}
+    restart: unless-stopped
+    depends_on:
+      - moodle
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      DOMAIN: ${MOODLE_DOMAIN:?Set MOODLE_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env (used for Let's Encrypt certificate notices)}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+volumes:
+  db_data:
+  moodledata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

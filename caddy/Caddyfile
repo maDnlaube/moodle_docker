@@ -1,0 +1,45 @@
+# Caddy reverse proxy for the Moodle stack.
+#
+# - Terminates HTTPS for {$DOMAIN} using Let's Encrypt (auto-issued and
+#   auto-renewed — no certbot, no cron jobs, no manual renewals).
+# - When DOMAIN=localhost, Caddy issues a local self-signed certificate
+#   instead, so you can test on your own computer without a real domain.
+# - Forwards all traffic to the internal moodle service (Apache, port 80).
+# - Sets X-Forwarded-* headers so Moodle's $CFG->sslproxy logic keeps every
+#   generated link on https.
+#
+# {$VAR} reads from the Caddy container's environment (set in
+# docker-compose.yml, values from .env).
+
+{
+    email {$ACME_EMAIL}
+    servers {
+        protocols h1 h2 h3
+    }
+}
+
+{$DOMAIN} {
+    encode gzip zstd
+
+    # Forward to the Apache+mod_php container. The headers let Moodle
+    # reconstruct the original request URL and the real visitor IP
+    # (config.php picks these up).
+    reverse_proxy moodle:80 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+
+    # Upload ceiling for assignments and course-backup files. Keep in sync
+    # with upload_max_filesize in moodle/php-overrides.ini.
+    request_body {
+        max_size 200MB
+    }
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}

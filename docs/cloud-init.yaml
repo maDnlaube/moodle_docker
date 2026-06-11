@@ -1,0 +1,55 @@
+#cloud-config
+# Optional one-shot provisioning for a fresh Ubuntu cloud server.
+#
+# What it does on first boot:
+#   - creates your admin user with SSH-key login
+#   - configures the firewall (SSH + web ports only)
+#   - hardens SSH (no root login, no password login)
+#   - enables fail2ban (blocks brute-force login attempts)
+#   - installs Docker
+#
+# How to use:
+#   1. Replace every <PLACEHOLDER> below.
+#   2. Paste the whole file into the "user data" / "cloud-init" field when
+#      creating the server in your provider's control panel
+#      (Hetzner: "Cloud config" — DigitalOcean: "User data" — etc.).
+#   3. After the server boots (and reboots once), log in with:
+#        ssh <YOUR_USERNAME>@YOUR_SERVER_IP
+#
+# Get your public SSH key with:  cat ~/.ssh/id_ed25519.pub
+# (see docs/server-setup.md if you don't have one yet)
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - fail2ban
+  - ufw
+
+users:
+  - name: <YOUR_USERNAME>
+    groups: [users, sudo]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - <YOUR_PUBLIC_SSH_KEY>
+
+runcmd:
+  # Firewall: SSH plus the web ports Caddy needs.
+  - ufw allow OpenSSH
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow 443/udp
+  - ufw --force enable
+  # fail2ban: ban IPs that repeatedly fail SSH login.
+  - printf "[sshd]\nenabled = true\n" > /etc/fail2ban/jail.local
+  - systemctl enable --now fail2ban
+  # SSH hardening: key-based login only, no root.
+  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 3/' /etc/ssh/sshd_config
+  # Docker (official install script) + allow your user to run it.
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker <YOUR_USERNAME>
+  - systemctl enable --now docker
+  - reboot

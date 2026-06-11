@@ -1,0 +1,14 @@
+# Secrets — never commit your real configuration.
+.env
+
+# Local backups (can be large; keep them out of git).
+backups/
+*.sql.gz
+*.tar.gz
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Unrelated local tooling
+.wix/
