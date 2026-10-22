@@ -1,4 +1,4 @@
-# Moodle 4.5 LTS docker-compose stack.
+# Moodle 5.3 LTS docker-compose stack.
 #
 # Services:
 #   db      MariaDB 11.4 LTS                              (persistent: db_data)
@@ -71,9 +71,9 @@ services:
       target: moodle
       args:
         PHP_VERSION: ${PHP_VERSION:-8.3}
-        MOODLE_BRANCH: ${MOODLE_BRANCH:-405}
-        MOODLE_TARBALL: ${MOODLE_TARBALL:-moodle-latest-405.tgz}
-    image: moodle-stack:${IMAGE_TAG:-4.5}
+        MOODLE_BRANCH: ${MOODLE_BRANCH:-503}
+        MOODLE_TARBALL: ${MOODLE_TARBALL:-moodle-latest-503.tgz}
+    image: moodle-stack:${IMAGE_TAG:-5.3}
     restart: unless-stopped
     depends_on:
       db:
@@ -96,7 +96,7 @@ services:
   # forum digests, cleans sessions, runs scheduled tasks). This reuses the
   # moodle image and simply loops the official CLI cron script.
   cron:
-    image: moodle-stack:${IMAGE_TAG:-4.5}
+    image: moodle-stack:${IMAGE_TAG:-5.3}
     restart: unless-stopped
     depends_on:
       db:
@@ -124,7 +124,7 @@ services:
     build:
       context: .
       target: proxy
-    image: moodle-stack-caddy:${IMAGE_TAG:-4.5}
+    image: moodle-stack-caddy:${IMAGE_TAG:-5.3}
     restart: unless-stopped
     depends_on:
       - moodle

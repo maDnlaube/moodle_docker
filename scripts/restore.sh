@@ -53,6 +53,9 @@ if [ -n "$DATA_TAR" ]; then
     ' < "$DATA_TAR"
 fi
 
+echo "Applying any pending database upgrade (needed when the backup came from an older Moodle version) ..."
+docker compose exec -T -u www-data moodle php /var/www/html/admin/cli/upgrade.php --non-interactive
+
 echo "Clearing Moodle caches ..."
 docker compose exec -u www-data moodle php /var/www/html/admin/cli/purge_caches.php || true
 

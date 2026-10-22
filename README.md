@@ -1,4 +1,4 @@
-# Moodle 4.5 LTS in Docker — Caddy + Apache + MariaDB
+# Moodle 5.3 LTS in Docker — Caddy + Apache + MariaDB
 
 A complete, production-ready [Moodle](https://moodle.org) learning platform
 that you configure by editing **one text file** and start with **one
@@ -12,6 +12,14 @@ a text file, you can run your own Moodle.
 your .env file  ──►  docker compose up -d --build  ──►  https://your-domain
 ```
 
+Moodle 5.3 is a **long-term support (LTS)** release, so it receives security
+fixes for years — a good base for a site you want to run without chasing
+every new version.
+
+> **Already running the Moodle 4.5 version of this repository?** Follow
+> [Upgrading from Moodle 4.5](#upgrading-from-moodle-45) — a plain
+> `git pull` is not enough.
+
 ---
 
 ## Contents
@@ -23,6 +31,7 @@ your .env file  ──►  docker compose up -d --build  ──►  https://your
 - [3. Deploy on a real server, step by step](#3-deploy-on-a-real-server-step-by-step)
 - [4. Everyday operations](#4-everyday-operations)
 - [5. Updating Moodle](#5-updating-moodle)
+  - [Upgrading from Moodle 4.5](#upgrading-from-moodle-45)
 - [6. Adding plugins](#6-adding-plugins)
 - [7. Troubleshooting](#7-troubleshooting)
 - [8. How it works](#8-how-it-works)
@@ -44,7 +53,7 @@ Four cooperating containers, defined in [`docker-compose.yml`](docker-compose.ym
                           │
             ┌─────────────▼─────────────┐     ┌────────────────────┐
             │ moodle — Apache + PHP     │     │ cron — background  │
-            │ with Moodle 4.5 LTS       │     │ task runner        │
+            │ with Moodle 5.3 LTS       │     │ task runner        │
             └─────────────┬─────────────┘     └─────────┬──────────┘
                           │                             │
             ┌─────────────▼─────────────────────────────▼──────────┐
@@ -55,9 +64,13 @@ Four cooperating containers, defined in [`docker-compose.yml`](docker-compose.ym
 - **Caddy** answers all traffic from the internet and handles HTTPS
   completely automatically (via Let's Encrypt). Nothing else is reachable
   from outside.
-- **Moodle** runs on Apache + PHP using the official
+- **Moodle** runs on Apache + PHP 8.3 using the official
   [`moodlehq/moodle-php-apache`](https://hub.docker.com/r/moodlehq/moodle-php-apache)
-  base image, with the Moodle 4.5 LTS source code baked in at build time.
+  base image, with the Moodle 5.3 LTS source code baked in at build time.
+  Apache only serves Moodle's `public/` folder, so files such as
+  `config.php` (which holds your database password) can never be
+  downloaded. PHP comes tuned for Moodle out of the box (opcache sized for
+  Moodle's code base, JIT compiler on, generous memory and upload limits).
 - **Cron** runs Moodle's required background tasks every minute (email
   sending, notifications, cleanup). Many beginner setups forget this — here
   it's just part of the stack.
@@ -141,6 +154,12 @@ warning — that is expected: for `localhost`, Caddy creates a self-signed
 certificate because a public one is impossible. Click "Advanced" →
 "Proceed" and log in.
 
+On a localhost test site, two of Moodle's self-checks report problems that
+a real server won't have: **Router** (under *Reports → System status*) and
+**Public paths** (under *Reports → Security checks*). Moodle runs these by
+fetching pages from its own address, and inside the container
+`https://localhost` is not the website. Ignore them locally.
+
 To throw the test site away completely:
 
 ```sh
@@ -212,7 +231,7 @@ docker compose up -d --build
 What happens now (5–15 minutes on the first run):
 
 1. Docker downloads the base images and builds the Moodle image
-   (downloads the current Moodle 4.5.x release).
+   (downloads the current Moodle 5.3.x release).
 2. MariaDB initializes the empty database.
 3. The moodle container waits for the database, then **installs Moodle
    automatically** — watch it:
@@ -239,12 +258,17 @@ docker compose ps    # all services "running", moodle eventually "healthy"
 ### Step 5 — Log in and look around
 
 Open `https://your-domain` and sign in with `MOODLE_ADMIN_USER` /
-`MOODLE_ADMIN_PASSWORD`. Recommended first stops inside Moodle:
+`MOODLE_ADMIN_PASSWORD`. Recommended first stops inside Moodle (all under
+**Site administration**):
 
-- **Site administration → Notifications** — should show no pending issues.
-- **Site administration → Server → Environment** — everything green.
-- **Site administration → Server → Email → Outgoing mail configuration →
-  Test outgoing mail configuration** — once you've configured SMTP.
+- **Notifications** — should show no pending issues.
+- **Reports → System status** — everything "OK", including **Router**.
+- **Reports → Security checks** — review the list; **Public paths** should
+  be "OK". Some entries (e.g. password policy, guest access) are site
+  decisions only you can make.
+- **Server → Environment** — everything green.
+- **Server → Email → Outgoing mail configuration → Test outgoing mail
+  configuration** — once you've configured SMTP.
 
 ### Step 6 — Set up backups (please don't skip this)
 
@@ -298,6 +322,7 @@ All commands run in the project folder (where `docker-compose.yml` lives).
 | Moodle maintenance mode on/off | `docker compose exec -u www-data moodle php admin/cli/maintenance.php --enable` (or `--disable`) |
 | Reset a forgotten admin password | `docker compose exec -u www-data moodle php admin/cli/reset_password.php` |
 | Purge Moodle caches | `docker compose exec -u www-data moodle php admin/cli/purge_caches.php` |
+| Run Moodle's health checks from the shell | `docker compose exec -u www-data moodle php admin/cli/checks.php` |
 
 **HTTPS certificate renewal:** automatic, roughly 30 days before expiry.
 There is genuinely nothing to do.
@@ -308,9 +333,9 @@ There is genuinely nothing to do.
 
 **Back up first** (`./scripts/backup.sh`), then:
 
-### Patch updates within 4.5.x (e.g. 4.5.5 → 4.5.7 — do this regularly)
+### Patch updates within 5.3.x (e.g. 5.3.1 → 5.3.2 — do this regularly)
 
-The image build always fetches the newest 4.5.x release, so:
+The image build always fetches the newest 5.3.x release, so:
 
 ```sh
 docker compose build --no-cache moodle
@@ -320,21 +345,93 @@ docker compose up -d
 On start, the stack detects the new code and applies the database upgrade
 automatically (you'll see it in `docker compose logs -f moodle`).
 
-### Major upgrades (e.g. 4.5 → 5.0 — deliberate, read release notes first)
+If you pinned an exact version in `.env` (e.g. `MOODLE_TARBALL=moodle-5.3.1.tgz`),
+change it to the new release first. Moodle names the first release of a
+branch without `.0` (`moodle-5.3.tgz`); later ones are `moodle-5.3.1.tgz`,
+`moodle-5.3.2.tgz`, and so on.
 
-1. Check that your plugins (if any) support the new version.
-2. In `.env`, set the new branch, e.g.:
+### Upgrading from Moodle 4.5
 
-   ```ini
-   MOODLE_BRANCH=500
-   MOODLE_TARBALL=moodle-latest-500.tgz
-   IMAGE_TAG=5.0
+Earlier versions of this repository installed Moodle 4.5 LTS. Moodle 5.1
+reorganised its files (everything browsers may see moved into a `public/`
+folder), and this repository changed with it. Moodle supports upgrading
+straight from 4.5 to 5.3, and your courses, users and files come along.
+Plan about 30 minutes; the site is only down for the few minutes the
+database upgrade takes.
+
+1. **Back up, and copy the backup off the server.**
+
+   ```sh
+   ./scripts/backup.sh
    ```
 
-3. Rebuild and restart as above.
+   If your provider offers server snapshots, take one as well.
 
-The system stays usable on the old version until the rebuilt container
-starts, so plan a few minutes of downtime.
+2. **Check your plugins.** Each additional plugin needs a release that
+   supports Moodle 5.3. If you baked plugins into the `Dockerfile`, change
+   their target folder from `/var/www/html/<type>/<name>` to
+   `/var/www/html/public/<type>/<name>` and switch them to their 5.3 branch.
+
+3. **Get the new version of this repository:**
+
+   ```sh
+   git pull
+   ```
+
+   (If git refuses because you changed the `Dockerfile`, run `git stash`,
+   `git pull`, `git stash pop`, then fix any conflict it reports.)
+
+4. **Update the build settings in `.env`.** Your `.env` still names 4.5,
+   and its values take priority over the new defaults. Change these three
+   lines to:
+
+   ```ini
+   MOODLE_BRANCH=503
+   MOODLE_TARBALL=moodle-latest-503.tgz
+   IMAGE_TAG=5.3
+   ```
+
+   If you forget this step, the build stops with an error pointing here.
+   Your running site is not affected by that.
+
+5. **Build and start:**
+
+   ```sh
+   docker compose up -d --build
+   docker compose logs -f moodle
+   ```
+
+   The moodle container finds your existing site and upgrades its database
+   (`[moodle-stack] Existing installation found — checking for pending
+   upgrades...`, followed by a long list of plugin names). Wait until the
+   log shows `Command line upgrade from 4.5... to 5.3... completed
+   successfully.` and Apache has started.
+
+6. **Check** the site as in [Step 5](#step-5--log-in-and-look-around).
+   Moodle 5.3 has a new look in places; nothing is lost.
+
+Keep the backup from step 1 until you are happy with the upgraded site:
+an upgraded database cannot be used by Moodle 4.5 again.
+
+### Major upgrades (the next Moodle version — deliberate, read release notes first)
+
+1. Read the new version's release notes and check that your plugins
+   support it.
+2. Check whether this repository has been updated for that version.
+3. In `.env`, set the new branch. The branch number is the version without
+   the dot, e.g. 6.0 → `600`:
+
+   ```ini
+   MOODLE_BRANCH=600
+   MOODLE_TARBALL=moodle-latest-600.tgz
+   IMAGE_TAG=6.0
+   ```
+
+4. Back up, then rebuild and restart as for a patch update.
+
+A new `IMAGE_TAG` keeps the previous image on the server, which makes going
+back quicker. Plan a few minutes of downtime: the site stays up on the old
+version until the rebuilt container starts and upgrades the database.
 
 ---
 
@@ -345,7 +442,8 @@ through the admin UI — that way, every fresh deployment of your repository
 has exactly the same plugin set ("infrastructure as code").
 
 Open the [`Dockerfile`](Dockerfile), find the *"Optional: bake plugins"*
-block in Stage 1, and follow the example there. Then:
+block in Stage 1, and follow the example there. Since Moodle 5.1, plugins
+go inside the `public/` folder (`/var/www/html/public/<type>/<name>`). Then:
 
 ```sh
 docker compose build moodle && docker compose up -d
@@ -370,6 +468,10 @@ The automatic upgrade on start registers the new plugin.
 - You haven't created `.env` (`cp .env.example .env`) or left a required
   value empty. The message names the exact variable.
 
+**The build fails with "... is older than Moodle 5.1"**
+- Your `.env` still asks for Moodle 4.5. See
+  [Upgrading from Moodle 4.5](#upgrading-from-moodle-45), step 4.
+
 **Browser warning on https://localhost**
 - Expected. Public certificates for `localhost` don't exist, so Caddy signs
   one itself. Click "Advanced" → "Proceed". Real domains get real
@@ -384,6 +486,13 @@ docker compose exec -u www-data moodle php admin/cli/maintenance.php --disable
 **Moodle pages load without styling or links point to http://**
 - `MOODLE_DOMAIN` in `.env` doesn't match the address in the browser.
   Fix `.env`, then `docker compose up -d`.
+
+**"Router" shows an error under Reports → System status**
+- On a localhost test site this is expected (see
+  [section 2](#2-optional-try-it-on-your-own-computer-first)). On a real
+  server, check that `https://your-domain/api/rest/v2/openapi.json` opens
+  in your browser, and that you didn't replace `moodle/config.php` or
+  `moodle/apache-vhost.conf` with older copies.
 
 **Emails never arrive**
 - SMTP not configured (`MOODLE_SMTP_HOSTS` empty), wrong credentials, or —
@@ -402,7 +511,7 @@ docker compose exec -u www-data moodle php admin/cli/maintenance.php --disable
   survive `down`, rebuilds and updates. Only `docker compose down -v`
   deletes volumes — never run it on a production site.
 
-**I changed something in caddy/Caddyfile or moodle/config.php — nothing happened**
+**I changed something in caddy/Caddyfile or a file in moodle/ — nothing happened**
 - Those files are baked into the images. Apply changes with
   `docker compose up -d --build`.
 
@@ -421,8 +530,9 @@ Repository layout:
 │   └── Caddyfile           reverse proxy + automatic HTTPS rules
 ├── moodle/
 │   ├── config.php          Moodle config — reads everything from .env values
+│   ├── apache-vhost.conf   Apache site: serves only public/, enables the router
 │   ├── entrypoint.sh       first-run auto-installer / auto-upgrader
-│   └── php-overrides.ini   PHP upload limits etc.
+│   └── php-overrides.ini   PHP limits + opcache/JIT performance tuning
 ├── scripts/
 │   ├── backup.sh           one-command backup (database + files)
 │   └── restore.sh          one-command restore
@@ -431,19 +541,39 @@ Repository layout:
     └── cloud-init.yaml     optional: fully automatic server provisioning
 ```
 
+Inside the moodle image, Moodle 5.3 is laid out like this:
+
+```
+/var/www/html/            project root — never reachable from a browser
+├── config.php            from moodle/config.php
+├── admin/cli/            command-line tools (upgrade, cron, maintenance, ...)
+├── vendor/               third-party PHP libraries
+└── public/               the webroot: the only folder Apache serves
+    ├── r.php             Moodle's router (newer pages and the REST API)
+    └── ...               course/, mod/, theme/, plugins, ...
+/var/www/moodledata/      uploaded files and caches (Docker volume)
+```
+
 Design choices, briefly:
 
 - **Caddy instead of certbot + Apache SSL config**: certificate issuance and
   renewal become a non-event instead of a recurring manual task. Only Caddy
   is exposed to the internet; Moodle and MariaDB are reachable solely on the
   internal Docker network.
+- **Only `public/` is web-reachable**: Moodle's configuration, libraries and
+  command-line tools sit outside the webroot. Files inside `public/` that
+  browsers never need (developer notes, test fixtures) return 404 as well,
+  which is exactly what Moodle's own security check looks for.
 - **Everything configurable lives in `.env`**: `config.php` reads its values
   from environment variables, so the same images run unchanged on any
   server. Required values are enforced with clear error messages.
 - **Moodle code baked into the image, data on volumes**: updating Moodle is
   "rebuild the image"; your database and files are never inside a container.
 - **A dedicated cron service**: Moodle's scheduled tasks run every minute
-  from day one, the way Moodle expects.
+  from day one, the way Moodle expects — no host crontab to forget.
+- **PHP tuned for Moodle**: the default opcache is too small for Moodle's
+  code base and slows every page; `moodle/php-overrides.ini` sizes it
+  properly and turns on PHP's JIT compiler.
 
 ## License
 

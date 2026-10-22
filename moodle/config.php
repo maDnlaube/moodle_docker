@@ -1,7 +1,8 @@
 <?php
 // Moodle config.php — reads all per-environment values from environment
 // variables so the same image is portable across servers. Baked into the
-// image at /var/www/html/config.php; the values come from .env via
+// image at /var/www/html/config.php, one level above the public/ webroot,
+// so browsers can never fetch it. The values come from .env via
 // docker-compose.yml.
 
 unset($CFG);
@@ -29,6 +30,12 @@ $CFG->dataroot = getenv('MOODLE_DATAROOT') ?: '/var/www/moodledata';
 $CFG->admin    = 'admin';
 $CFG->directorypermissions = 02775;
 
+// Apache hands every URL that isn't a real file to Moodle's router
+// (FallbackResource /r.php in moodle/apache-vhost.conf). Without this flag
+// Moodle 5.3 reports an error under Site administration > Reports >
+// System status and keeps "r.php" in the URLs it generates.
+$CFG->routerconfigured = true;
+
 // --- Reverse proxy --------------------------------------------------------
 // Caddy terminates HTTPS and forwards plain HTTP to Apache. Moodle needs to
 // know (a) the original scheme so links stay https, and (b) the real client
@@ -42,7 +49,7 @@ if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
     $_SERVER['REMOTE_ADDR'] = trim($remote);
 }
 // Do NOT enable $CFG->reverseproxy here. Moodle's reverseproxy mode (see
-// lib/setuplib.php) requires the proxy to *rewrite* the Host header to an
+// public/lib/setuplib.php) requires the proxy to *rewrite* the Host header to an
 // internal name and throws 'reverseproxyabused' when Host matches wwwroot.
 // Our Caddy preserves the original Host (the standard reverse-proxy
 // behavior), so reverseproxy=true would trip that check on every request.
