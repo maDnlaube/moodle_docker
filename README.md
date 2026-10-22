@@ -213,7 +213,7 @@ Worth setting now (optional ones can wait):
 |---|---|
 | `MOODLE_SITE_FULLNAME` | Your platform's display name, e.g. `"Greenfield School E-Learning"` |
 | `MOODLE_SITE_SHORTNAME` | Short form for menus, e.g. `GSE` |
-| `MOODLE_TIMEZONE` | e.g. `Europe/Berlin`, `Asia/Dili` |
+| `MOODLE_TIMEZONE` | e.g. `Europe/Berlin`, `Asia/Tokyo` |
 | `MOODLE_SMTP_*` | Outgoing email — see [Outgoing email](#outgoing-email) below; fine to leave empty at first |
 
 Save and exit (in nano: `Ctrl+O`, `Enter`, `Ctrl+X`).

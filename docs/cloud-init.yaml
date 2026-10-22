@@ -12,7 +12,7 @@
 #   1. Replace every <PLACEHOLDER> below.
 #   2. Paste the whole file into the "user data" / "cloud-init" field when
 #      creating the server in your provider's control panel
-#      (Hetzner: "Cloud config" — DigitalOcean: "User data" — etc.).
+#      (often labelled "User data" or "Cloud config").
 #   3. After the server boots (and reboots once), log in with:
 #        ssh <YOUR_USERNAME>@YOUR_SERVER_IP
 #

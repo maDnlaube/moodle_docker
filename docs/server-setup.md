@@ -15,9 +15,9 @@ in the README.
 
 ### A1. Choose a provider and size
 
-Any provider that rents Linux virtual machines works: Hetzner, DigitalOcean,
-Vultr, Linode, OVH, AWS Lightsail, etc. A sensible starting size for a
-small-to-medium Moodle (tens to a few hundred active users):
+Any provider that rents Linux virtual machines (often called "VPS",
+"cloud server", "instance" or "droplet") works. A sensible starting size
+for a small-to-medium Moodle (tens to a few hundred active users):
 
 | Resource | Minimum | Comfortable |
 |----------|---------|-------------|
@@ -102,7 +102,7 @@ docker compose version    # should print v2.x
 
 ### A7. Important: outgoing email is probably blocked
 
-Most cloud providers (Hetzner, AWS, DigitalOcean, ...) **silently block
+Most cloud providers **silently block
 outgoing SMTP ports (25, 465, 587)** on new accounts to prevent spam. The
 block is enforced upstream — your firewall won't show it, and the symptom
 is plain connection timeouts to *any* mail server.
